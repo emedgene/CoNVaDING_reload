@@ -1,4 +1,5 @@
 #!/usr/bin/perl -w
+
 use strict;
 use warnings;
 use diagnostics;
@@ -13,8 +14,11 @@ use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
-my $version_reload = "1.3";
-my $version = "1.2.1" ;
+#my $version_reload = "1.3";
+#my $version = "1.2.1" ;
+our $VERSION = '1.3.8';
+my $version_reload = $VERSION;
+my $version = $VERSION;
 
 ##############################################################################################
 ##############################################################################################
@@ -55,6 +59,7 @@ $params->{sampleRatioScore}              = 0.09;
 $params->{percentageLessReliableTargets} = 20;
 $params->{numBestMatchSamplesCmdL}       = 30;
 $params->{mode}                          = "StartWithBam";
+$params->{samtoolsdepthmaxcov}           = 8000;
 
 #### get options
 GetOptions(
@@ -75,6 +80,7 @@ GetOptions(
     "sampleRatioScore:s"              => \$params->{sampleRatioScore}, #optional
     "targetQcList:s"                  => \$params->{targetQcList}, #optional
     "percentageLessReliableTargets:s" => \$params->{percentageLessReliableTargets}, #optional
+    "samtoolsdepthmaxcov:i"           => \$params->{samtoolsdepthmaxcov},
     "h|help"                          => sub { usage() and exit(1)},
     "version"                         => sub { print "CoNVaDING relaod v".$version_reload." modified fork from CoNVaDING v".$version."\n" and exit(1)}
 );
@@ -218,7 +224,11 @@ print STDERR "\nStarting analysis $starttime\n";
 print STDERR "\n#######################################\n";
 print STDERR "Parameteres in effect in this Run:\n";
 foreach my $key (keys %{$params}){
-    print STDERR $key.":\t".$params->{$key}."\n";
+    if(defined($params->{$key})){
+        warn "\t$key:\t".$params->{$key}."\n";
+    }else{
+        warn "\t$key:\tundef=(FLAG in off position)\n";
+    }
 }
 print STDERR "#######################################\n";
 
@@ -2343,6 +2353,7 @@ sub countFromBam {
      
     my $counts_tmp_file   = File::Temp->new( TEMPLATE => 'tempXXXXX', SUFFIX => '.txt'  );
 
+    print $counts_tmp_file uc(join("\t", 'chr', 'start', 'stop', 'gene', 'target', 'regioncov'."\n"));
     foreach my $line (@bedfile){
         $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         chomp $line;
@@ -2353,16 +2364,31 @@ sub countFromBam {
             my $stop=$array[2];
             my $gene=$array[3];
             my $target= $array[4] || "";
-            my $extractcov = join " ",  "samtools", 
+            my $extractcov = join " ", ( "samtools", 
                                         "depth",
+                                        "-d",$params -> {samtoolsdepthmaxcov},
                                         "-r",
                                         $chr.":".$start."-".$stop,
                                         "-a",
                                         "-q",0,
                                         "-Q",0,
                                         $bam,
-                                        "| awk \'\{sum+=\$3\} END \{print sum\/NR\}\'";
-            my $regioncov = `$extractcov`;
+       	       	       	       	       	'| awk \'BEGIN {
+                                                    sum = 0
+                                                }{  
+       	       	       	       	       	       	       	if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
+       	       	       	       	       	       	       	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
+       	       	       	       	       	       	       	       	exit 1;
+       	       	       	       	       	       	       	};
+       	       	       	       	       	       	       	sum+=$3
+       	       	       	       	       	       	} END {
+       	       	       	       	       	       	      	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
+                                                                print sum/NR
+                                                        }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
+                                                                print 0
+                                                        }else{} 
+       	       	       	       	       	        }\'');
+            my $regioncov = join("\n",CmdRunner($extractcov));
             chomp $regioncov;
             unless (defined $regioncov) { #Check for empty variable, if true set coverage to 0
                 $regioncov = 0;
@@ -2552,7 +2578,8 @@ sub rmDupBam {
     my $rmdup_bam   = File::Temp->new( TEMPLATE => 'tempXXXXX',DIR => $tmp_dir, SUFFIX => '.rmdup.bam'  );
     my $aligned_sam = File::Temp->new( TEMPLATE => 'tempXXXXX',DIR => $tmp_dir, SUFFIX => '.aligned.only.sam');
 
-    
+    #Clean this up should be something like  samtools rmdup input.bam | samtools view -Sb -h -F 0x400 >  rmdup.bam && samtools index rmdup.bam
+
     #Mark duplicates command
     my $rmdup = join " ",   "samtools",
                             "rmdup",
@@ -2584,11 +2611,12 @@ sub rmDupBam {
                             $rmDup_file->filename;
 
     #Execute the above defined steps
-    system( $rmdup ) == 0    or die "Removing duplicates from file failed: $!";
-    system( $rmdupIdx ) == 0 or die "Removing duplicates from file failed: $!";
-    system( $sam ) == 0      or die "Removing duplicates from file failed: $!";
-    system( $sam2bam ) == 0  or die "Removing duplicates from file failed: $!";
-    system( $bamIdx ) == 0   or die "Removing duplicates from file failed: $!";    
+    warn "Executed rmdup mark dups on input bam\n". join( "\n" , CmdRunner($rmdup ));
+    warn "Executed rmdupIdx: mark dups bam indexing\n". join( "\n" , CmdRunner($rmdupIdx ));
+    warn "Executed sam: hard remove dup reads and store to sam\n". join( "\n" , CmdRunner($sam ));
+    warn "Executed sam2bam: convert sam to bam\n". join( "\n" , CmdRunner($sam2bam ));
+    warn "Executed bamIdx: bam index command\n". join( "\n" , CmdRunner($bamIdx ));
+    
     
     return ($rmDup_file);
 }
@@ -2827,8 +2855,34 @@ PARAMETERS:
 
 -percentageLessReliableTargets\tTarget labelled as less reliable in percentage
 \t\t\tof control samples. DEFAULT: 20
+
+-samtoolsdepthmaxcov\tConfigure the max coverage of 'samtools depth' tool with this
+\t\t\tswitch. The count is capped at this value for an interval. DEFAULT=8000
+
 #########################################################################################################
 
 EOF
  
+}
+
+sub CmdRunner {
+        my $ret;
+        my $cmd = join(" ",@_);
+
+        warn localtime( time() ). " [INFO] system call:'". $cmd."'.\n";
+
+	#safety for everything
+        @{$ret} = `set -e -o pipefail && ($cmd )`;
+        if ($? == -1) {
+                die localtime( time() ). " [ERROR] failed to execute: $!\n";
+        }elsif ($? & 127) {
+                die localtime( time() ). " [ERROR] " .sprintf "child died with signal %d, %s coredump",
+                 ($? & 127),  ($? & 128) ? 'with' : 'without';
+        }elsif ($? != 0) {
+                die localtime( time() ). " [ERROR] " .sprintf "child died with signal %d, %s coredump",
+                 ($? & 127),  ($? & 128) ? 'with' : 'without';
+        }else {
+               	warn localtime( time() ). " [INFO] " . sprintf "child exited with value %d\n", $? >> 8;
+        }
+	return @{$ret};
 }
