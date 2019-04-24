@@ -1,7 +1,7 @@
 # CoNVaDING_reload
 
 This is a fork of the original project CoNVaDING
-This project is the official one and I make no claims to be a replacement of it.
+That project is the official one and I make no claims to be a replacement of it.
 
 If you want to follow the official project please go to: 
 
