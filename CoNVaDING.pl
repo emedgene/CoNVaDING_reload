@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 
 use strict;
 use warnings;
@@ -12,11 +12,11 @@ use POSIX qw(ceil);
 use POSIX qw(floor);
 use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
-
+use Data::Dumper;
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
 #my $version_reload = "1.3";
 #my $version = "1.2.1" ;
-our $VERSION = '1.3.8';
+our $VERSION = '1.3.13';
 my $version_reload = $VERSION;
 my $version = $VERSION;
 
@@ -60,6 +60,7 @@ $params->{percentageLessReliableTargets} = 20;
 $params->{numBestMatchSamplesCmdL}       = 30;
 $params->{mode}                          = "StartWithBam";
 $params->{samtoolsdepthmaxcov}           = 8000;
+$params->{ampliconcov}           = 0;
 
 #### get options
 GetOptions(
@@ -80,10 +81,12 @@ GetOptions(
     "sampleRatioScore:s"              => \$params->{sampleRatioScore}, #optional
     "targetQcList:s"                  => \$params->{targetQcList}, #optional
     "percentageLessReliableTargets:s" => \$params->{percentageLessReliableTargets}, #optional
-    "samtoolsdepthmaxcov:i"           => \$params->{samtoolsdepthmaxcov},
+    "samtoolsdepthmaxcov:i"           => \$params->{samtoolsdepthmaxcov},#optional for startwitham
+    "ampliconcov:f"                     => \$params->{ampliconcov},#optional for startwithbam
     "h|help"                          => sub { usage() and exit(1)},
     "version"                         => sub { print "CoNVaDING relaod v".$version_reload." modified fork from CoNVaDING v".$version."\n" and exit(1)}
 );
+# ((defined $params->{sampleAsControl} && defined $params->{controlsdir})&& $params->{controlsdir} ne $params->{outputdir})
 #Obligatory args
 usage() and exit(1) unless $params->{mode};
 usage() and exit(1) unless $params->{outputdir};
@@ -142,7 +145,7 @@ if ($params->{mode} eq "addToControls"){
         $params->{sampleAsControl} = 1;
     }
     if (not defined $params->{controlsDir}){
-        $params->{controlsDir} = $params->{outputDir};
+        $params->{controlsDir} = $params->{outputdir};
     }
 }
 
@@ -2205,7 +2208,7 @@ sub createNormalizedCoverageFiles {
                     my $normautoControl = $linesControl_fields[$normAutoIdxControl];
                     my $normsexControl  = $linesControl_fields[$normSexIdxControl];
                     my $keyControl = $lineControl;
-                    if ($chrSample == $chrControl && $startSample == $startControl && $stopSample == $stopControl){ #Check if chr, start and stop match, if not throw error and skip this file from analysis
+                    if ($chrSample eq $chrControl && $startSample == $startControl && $stopSample == $stopControl){ #Check if chr, start and stop match, if not throw error and skip this file from analysis
                         my $absDiffAuto = abs($normautoSample-$normautoControl); #Calculate absolute difference autosomal coverage
                         my $absDiffSex = abs($normsexSample-$normsexControl); #Calculate absolute difference all coverage
                         push(@absDiffsAuto, $absDiffAuto);
@@ -2331,7 +2334,7 @@ sub writeOutput {
     print OUTPUT $outputToWrite;
     close(OUTPUT);
     #If $params->{sampleAsControl} variable is specified write output files to controlsdir too
-    if (defined $params->{sampleAsControl} && defined $params->{controlsdir} && $params->{controlsdir} ne $params->{outputDir}){
+    if ((defined $params->{sampleAsControl} && defined $params->{controlsdir})&& $params->{controlsdir} ne $params->{outputdir}){
         my $c_dir = $params->{controlsdir};
         `cp $outputfile $c_dir/`;
     }
@@ -2357,46 +2360,74 @@ sub countFromBam {
     foreach my $line (@bedfile){
         $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         chomp $line;
-        if ($line =~ m/.+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,}.+/gs){ #Check if line corresponds to chr, start, stop (Should we check if there is a genename, or do we assume this? Otherwise we could check regions and autoincrement them)
+        if ($line =~ m/^\S+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,}/gs){ #Check if line corresponds to chr, start, stop (Should we check if there is a genename, or do we assume this? Otherwise we could check regions and autoincrement them)
             my @array = split("\t", $line); #read line, split by tab
             my $chr=$array[0];
             my $start=$array[1];
             my $stop=$array[2];
             my $gene=$array[3];
             my $target= $array[4] || "";
-            my $extractcov = join " ", ( "samtools", 
-                                        "depth",
-                                        "-d",$params -> {samtoolsdepthmaxcov},
-                                        "-r",
-                                        $chr.":".$start."-".$stop,
-                                        "-a",
-                                        "-q",0,
-                                        "-Q",0,
-                                        $bam,
-       	       	       	       	       	'| awk \'BEGIN {
-                                                    sum = 0
-                                                }{  
-       	       	       	       	       	       	       	if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
-       	       	       	       	       	       	       	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
-       	       	       	       	       	       	       	       	exit 1;
-       	       	       	       	       	       	       	};
-       	       	       	       	       	       	       	sum+=$3
-       	       	       	       	       	       	} END {
-       	       	       	       	       	       	      	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
-                                                                print sum/NR
+            my $extractcov;
+            if($params -> {ampliconcov}){
+		#amplicon coverage mode/iontorrent 
+                $extractcov = join(' ' , ("samtools view  $bam -H |",
+					" perl -wne 'if(s/^\\\@SQ\\tSN://){s!LN:!!; print};' > $bam.genome ; ".'echo -e "'.$chr.'\t'.$start.'\t'.$stop.'" > '.$bam.'.bed;',
+					"bedtools intersect  -g ",
+					" $bam.genome",
+			  		"-F ".$params -> {ampliconcov}."  -f ".$params -> {ampliconcov}."  -u  -sorted  -a $bam  -b $bam.bed ",
+					"> ${bam}_tmp.bam;",
+					"samtools index ${bam}_tmp.bam;",
+					"samtools depth -d ",$params -> {samtoolsdepthmaxcov}," -r  ".$chr.":".$start."-".$stop." -a -Q 0 -q 0 ${bam}_tmp.bam ",'| awk \'BEGIN {
+                                                        sum = 0;
+                                                     }{
+       	       	       	       	       	                 if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
+       	       	       	       	       	           	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
+       	       	       	       	       	       	               	exit 1;
+       	       	       	       	       	       	         };
+       	       	       	       	       	           	       	sum+=$3;
+       	       	       	       	       	             } END {
+       	       	       	       	       	           	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
+                                                        	print sum/NR;
                                                         }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
-                                                                print 0
+                                                        	print 0;
                                                         }else{} 
-       	       	       	       	       	        }\'');
-            my $regioncov = join("\n",CmdRunner($extractcov));
-            chomp $regioncov;
-            unless (defined $regioncov) { #Check for empty variable, if true set coverage to 0
-                $regioncov = 0;
-            }
-            $regioncov =~ s/-nan/0/gs;
-            print $counts_tmp_file join "\t", $chr, $start, $stop, $gene, $target, $regioncov."\n";
+       	       	       	       	       	             }\';',"rm ${bam}_tmp.bam "));
+            }else{
+                #regular mode
+                $extractcov = join " ", ( "samtools", 
+                                            "depth",
+                                            "-d",$params -> {samtoolsdepthmaxcov},
+                                            "-r",
+                                            $chr.":".$start."-".$stop,
+                                            "-a",
+                                            "-q",0,
+                                            "-Q",0,
+                                            $bam,
+       	       	       	           	       	'| awk \'BEGIN {
+                                                        sum = 0
+                                                     }{  
+       	       	       	       	       	                 if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
+       	       	       	       	       	           	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
+       	       	       	       	       	       	               	exit 1;
+       	       	       	       	       	       	         };
+       	       	       	       	       	           	       	sum+=$3
+       	       	       	       	       	             } END {
+       	       	       	       	       	           	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
+                                                        	print sum/NR
+                                                        }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
+                                                        	print 0
+                                                        }else{} 
+       	       	       	       	       	             }\'');
+           }
+        my $regioncov = join("\n",CmdRunner($extractcov));
+        chomp $regioncov;
+        unless (defined $regioncov) { #Check for empty variable, if true set coverage to 0
+          $regioncov = 0;
+        }
+        $regioncov =~ s/-nan/0/gs;
+        print $counts_tmp_file join "\t", $chr, $start, $stop, $gene, $target, $regioncov."\n";
         }else{
-            print STDERR "Incorrect BED file format, please check your BED file before processing.\n";
+            die 'ERROR ## Incorrect BED file format at line '.$. .' containing '.$line.' this does not match ^\S+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,} , please check your BED file before processing.\n';
         }
     }
     
@@ -2480,19 +2511,23 @@ sub calcCovAutoSex {
     my $covchrautoval;
     my $covchrall;
     my %counts;
-    
+	
+    #
+
     foreach my $num (@$covchrauto){
-        $covchrautosum = ($covchrautosum + $num); #total autosomal coverage
+        $covchrautosum += $num; #total autosomal coverage
     }
     foreach my $num (@$covchrsex){
-        $covchrsexsum = ($covchrsexsum + $num); #total sex chromosomes coverage
+        $covchrsexsum += $num; #total sex chromosomes coverage
     }
     my $covchrallsum = ($covchrautosum + $covchrsexsum); #total coverage all chromosomes
     #count number of regions
-    my $covchrautolength=scalar(@$covchrauto);
-    my $covchrsexlength=scalar(@$covchrsex);
+    my $covchrautolength = scalar(@$covchrauto);
+    my $covchrsexlength = scalar(@$covchrsex);
     my $covchralllength = ($covchrautolength + $covchrsexlength);
     #calculate average coverage for all chromosomes and autosomal chromosomes only
+    #this errors on zero why?
+    warn Dumper(@_,$covchrautolength,$covchrsexlength)." ";
     $covchrall = ($covchrallsum/$covchralllength);
     #if sample does not have targets in sex chromossomes $covchrautolength is 0 and calculation fails
     if ($covchrautolength == 0){
@@ -2502,7 +2537,7 @@ sub calcCovAutoSex {
     }
     #Count occurences of genenames
     $counts{$_}++ for @$genes;
-    
+    #die Dumper(@_)." ";
     return($covchrautoval, $covchrall, \%counts);
 }
 
@@ -2535,8 +2570,14 @@ sub writeCountFile {
         my $genecount = $countsh->{ $gene }; #number of regions on gene
         my $genecov = ($genename/$genecount); #avg coverage per gene
         #Calculate normalized coverages
-        my $normAuto = (($coverageh->{ $key })/$covchrautoval);
-        my $normTotal = (($coverageh->{ $key })/$covchrall);
+	my $normAuto;
+	if($covchrautoval !=0){
+            $normAuto = (($coverageh->{ $key })/$covchrautoval);
+        }else{$normAuto=0;}
+        my $normTotal;
+        if($covchrall != 0){
+            $normTotal = (($coverageh->{ $key })/$covchrall);
+        }else{$normTotal=0;}
         my $normGene;
         if ($genecov != 0) { #Check if coverage for complete gene is not null, if it is, don't calculate
             $normGene = (($coverageh->{ $key })/$genecov);
@@ -2772,7 +2813,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\tREQUIRED:
 \t\t\t\t[-inputDir, -outputDir, -bed, -controlsDir]
 \t\t\t\tOPTIONAL:
-\t\t\t\t[-rmDup, -useSampleAsControl]
+\t\t\t\t[-rmDup, -useSampleAsControl, -ampliconcov]
 
 \t\t\tStartWithAvgCount :
 \t\t\t\tStart with Average Count files as input. This is a five column text file
@@ -2859,6 +2900,8 @@ PARAMETERS:
 -samtoolsdepthmaxcov\tConfigure the max coverage of 'samtools depth' tool with this
 \t\t\tswitch. The count is capped at this value for an interval. DEFAULT=8000
 
+-ampliconcov\tConfigure to only select amplicons spanning the target regions by fraction
+\t\t\tso overlapping targets aren't counted twice in the overlapping bases(for iontorrent).
 #########################################################################################################
 
 EOF
@@ -2872,7 +2915,7 @@ sub CmdRunner {
         warn localtime( time() ). " [INFO] system call:'". $cmd."'.\n";
 
 	#safety for everything
-        @{$ret} = `set -e -o pipefail && ($cmd )`;
+        @{$ret} = `set -e -o pipefail; ($cmd)`;
         if ($? == -1) {
                 die localtime( time() ). " [ERROR] failed to execute: $!\n";
         }elsif ($? & 127) {
