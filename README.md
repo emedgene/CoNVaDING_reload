@@ -27,6 +27,10 @@ How to install on ubuntu 18.04 to your home:
 # install bedtools / samtools 
 sudo apt install bedtools samtools
 
+#install mosdepth
+wget https://github.com/brentp/mosdepth/releases/download/v0.2.5/mosdepth && chmod +x ./mosdepth && export PATH=$(pwd):$PATH
+#make sure it is included on your path
+
 # install convading
 cpanm --installdeps --notest .
 perl Makefile.PL PREFIX=~/

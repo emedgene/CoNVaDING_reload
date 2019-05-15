@@ -16,12 +16,18 @@ $extdeps = [
 	{	"dep" => "htslib",
 		"test" => "(exit 0)",
 		"hint" => "wget https://github.com/samtools/htslib/releases/download/1.7/htslib-1.7.tar.bz2 && tar -jxf htslib* && cd htslib* && make" 
-	},{	"dep" => "samtools",
+	},
+	{	"dep" => "samtools",
 		"test" => "which samtools",
 		"hint" => "wget https://github.com/samtools/samtools/releases/download/1.7/samtools-1.7.tar.bz2 && tar -jxf samtools* && cd samtools* && make"
-	},{	"dep" => "bedtools",
+	},
+	{	"dep" => "bedtools",
 		"test" => "bedtools --version",
 		"hint" => "wget https://github.com/arq5x/bedtools2/releases/download/v2.27.1/bedtools-2.27.1.tar.gz && tar -xzf https://github.com/arq5x/bedtools2/releases/download/v2.27.1/bedtools-2.27.1.tar.gz && cd bed* && make"
+	},
+	{	"dep" => "mosdepth",
+		"test" => "mosdepth --version",
+		"hint" => 'wget https://github.com/brentp/mosdepth/releases/download/v0.2.5/mosdepth && chmod +x ./mosdepth && export PATH=$(pwd):$PATH'
 	}
 ];
 
@@ -73,7 +79,6 @@ CoNVaDING: Single Exon Variation Detection in Targeted NGS Data. Hum Mutat. 2016
         'Statistics::Distributions' => '1.02',
         'Statistics::Normality' => '0.01',
         'File::Temp' => '0.2304',
-        'Term::ProgressBar'=> '2.22',;
 	},
 	"BUILD_REQUIRES" => {
 		'Test::More' => '0.47',
