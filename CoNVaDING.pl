@@ -2890,7 +2890,6 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 \t\t\t\t[-samtools-depth]
 
-
 \t\t\tStartWithBam :
 \t\t\t\tStart with BAM files as input, to enable duplicate
 \t\t\t\tremoval use the rmdup variable.
@@ -2899,6 +2898,8 @@ Usage: $0 <mode> <parameters>
 \t\t\t\tOPTIONAL:
 \t\t\t\t[-rmDup, -useSampleAsControl, -ampliconcov]
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
+\t\t\t\t[-samtools-depth]
+
 
 \t\t\tStartWithAvgCount :
 \t\t\t\tStart with Average Count files as input. This is a five column text file
