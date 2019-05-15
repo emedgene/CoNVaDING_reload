@@ -2865,6 +2865,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-regionThreshold, -ratioCutOffLow, -ratioCutOffHigh, -zScoreCutOffLow, -zScoreCutOffHigh, -sampleRatioScore]
 \t\t\t\t[-percentageLessReliableTargets]
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
+\t\t\t\t[-samtools-depth]
 
 \t\t\tPipelineFromCounts :
 \t\t\t\tStart with BAM files as input, to enable duplicate
@@ -2887,6 +2888,8 @@ Usage: $0 <mode> <parameters>
 \t\t\t\tOPTIONAL:
 \t\t\t\t[-rmDup, ]
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
+\t\t\t\t[-samtools-depth]
+
 
 \t\t\tStartWithBam :
 \t\t\t\tStart with BAM files as input, to enable duplicate
