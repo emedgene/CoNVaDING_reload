@@ -60,7 +60,9 @@ $params->{percentageLessReliableTargets} = 20;
 $params->{numBestMatchSamplesCmdL}       = 30;
 $params->{mode}                          = "StartWithBam";
 $params->{samtoolsdepthmaxcov}           = 8000;
-$params->{ampliconcov}           = 0;
+$params->{ampliconcov}                   = 0;
+$params->{mosdepth_fastmode}             = 1;
+$params->{mosdepth_threads}              = 4;
 
 #### get options
 GetOptions(
@@ -82,7 +84,9 @@ GetOptions(
     "targetQcList:s"                  => \$params->{targetQcList}, #optional
     "percentageLessReliableTargets:s" => \$params->{percentageLessReliableTargets}, #optional
     "samtoolsdepthmaxcov:i"           => \$params->{samtoolsdepthmaxcov},#optional for startwitham
-    "ampliconcov:f"                     => \$params->{ampliconcov},#optional for startwithbam
+    "ampliconcov:f"                   => \$params->{ampliconcov},#optional for startwithbam
+    "mosdepth-fast-mode!"             => \$params->{mosdepth_fastmode},#on by default
+    "mosdepth-threads:i"              => \$params->{mosdepth_threads},#4 by by default (max)
     "h|help"                          => sub { usage() and exit(1)},
     "version"                         => sub { print "CoNVaDING relaod v".$version_reload." modified fork from CoNVaDING v".$version."\n" and exit(1)}
 );
@@ -2360,80 +2364,100 @@ sub countFromBam {
     my $counts_tmp_file   = File::Temp->new( TEMPLATE => 'tempXXXXX', SUFFIX => '.txt'  );
 
     print $counts_tmp_file uc(join("\t", 'chr', 'start', 'stop', 'gene', 'target', 'regioncov'."\n"));
-    foreach my $line (@bedfile){
-        $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
-        chomp $line;
-        if ($line =~ m/^\S+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,}/gs){ #Check if line corresponds to chr, start, stop (Should we check if there is a genename, or do we assume this? Otherwise we could check regions and autoincrement them)
-            my @array = split("\t", $line); #read line, split by tab
-            my $chr=$array[0];
-            my $start=$array[1];
-            my $stop=$array[2];
-            my $gene=$array[3];
-            my $target= $array[4] || "";
-            my $extractcov;
-            if($params -> {ampliconcov}){
-		#amplicon coverage mode/iontorrent 
+
+    if($params -> {ampliconcov}){
+
+        foreach my $line (@bedfile){
+            $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
+            chomp $line;
+            if ($line =~ m/^\S+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,}/gs){ #Check if line corresponds to chr, start, stop (Should we check if there is a genename, or do we assume this? Otherwise we could check regions and autoincrement them)
+                my @array = split("\t", $line); #read line, split by tab
+                my $chr=$array[0];
+                my $start=$array[1];
+                my $stop=$array[2];
+                my $gene=$array[3];
+                my $target= $array[4] || "";
+                my $extractcov;
                 $extractcov = join(' ' , ("samtools view  $bam -H |",
-					" perl -wne 'if(s/^\\\@SQ\\tSN://){s!LN:!!; print};' > $bam.genome ; ".'echo -e "'.$chr.'\t'.$start.'\t'.$stop.'" > '.$bam.'.bed;',
-					"bedtools intersect  -g ",
-					" $bam.genome",
-			  		"-F ".$params -> {ampliconcov}."  -f ".$params -> {ampliconcov}."  -u  -sorted  -a $bam  -b $bam.bed ",
-					"> ${bam}_tmp.bam;",
-					"samtools index ${bam}_tmp.bam;",
-					"samtools depth -d ",$params -> {samtoolsdepthmaxcov}," -r  ".$chr.":".$start."-".$stop." -a -Q 0 -q 0 ${bam}_tmp.bam ",'| awk \'BEGIN {
+                    " perl -wne 'if(s/^\\\@SQ\\tSN://){s!LN:!!; print};' > $bam.genome ; ".'echo -e "'.$chr.'\t'.$start.'\t'.$stop.'" > '.$bam.'.bed;',
+                    "bedtools intersect  -g ",
+                    " $bam.genome",
+                    "-F ".$params -> {ampliconcov}."  -f ".$params -> {ampliconcov}."  -u  -sorted  -a $bam  -b $bam.bed ",
+                    "> ${bam}_tmp.bam;",
+                    "samtools index ${bam}_tmp.bam;",
+                    "samtools depth -d ",$params -> {samtoolsdepthmaxcov}," -r  ".$chr.":".$start."-".$stop." -a -Q 0 -q 0 ${bam}_tmp.bam ",'| awk \'BEGIN {
                                                         sum = 0;
-                                                     }{
-       	       	       	       	       	                 if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
-       	       	       	       	       	           	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
-       	       	       	       	       	       	               	exit 1;
-       	       	       	       	       	       	         };
-       	       	       	       	       	           	       	sum+=$3;
-       	       	       	       	       	             } END {
-       	       	       	       	       	           	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
-                                                        	print sum/NR;
+                                                        }{
+                                                        if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
+                                                            print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
+                                                            exit 1;
+                                                        };
+                                                            sum+=$3;
+                                                        } END {
+                                                        if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
+                                                            print sum/NR;
                                                         }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
-                                                        	print 0;
+                                                            print 0;
                                                         }else{} 
-       	       	       	       	       	             }\';',"rm ${bam}_tmp.bam "));
+                                                        }\';',"rm ${bam}_tmp.bam "));
+                my $regioncov = join("\n",CmdRunner($extractcov));
+                chomp $regioncov;
+                unless (defined $regioncov) { #Check for empty variable, if true set coverage to 0
+                    $regioncov = 0;
+                }
+                $regioncov =~ s/-nan/0/gs;
+                print $counts_tmp_file join "\t", $chr, $start, $stop, $gene, $target, $regioncov."\n";
             }else{
-                #regular mode
-                $extractcov = join " ", ( "samtools", 
-                                            "depth",
-                                            "-d",$params -> {samtoolsdepthmaxcov},
-                                            "-r",
-                                            $chr.":".$start."-".$stop,
-                                            "-a",
-                                            "-q",0,
-                                            "-Q",0,
-                                            $bam,
-       	       	       	           	       	'| awk \'BEGIN {
-                                                        sum = 0
-                                                     }{  
-       	       	       	       	       	                 if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
-       	       	       	       	       	           	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
-       	       	       	       	       	       	               	exit 1;
-       	       	       	       	       	       	         };
-       	       	       	       	       	           	       	sum+=$3
-       	       	       	       	       	             } END {
-       	       	       	       	       	           	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
-                                                        	print sum/NR
-                                                        }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
-                                                        	print 0
-                                                        }else{} 
-       	       	       	       	       	             }\'');
-           }
-        my $regioncov = join("\n",CmdRunner($extractcov));
-        chomp $regioncov;
-        unless (defined $regioncov) { #Check for empty variable, if true set coverage to 0
-          $regioncov = 0;
+                die 'ERROR ## Incorrect BED file format at line '.$. .' containing '.$line.' this does not match ^\S+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,} , please check your BED file before processing.\n';
+            }
         }
-        $regioncov =~ s/-nan/0/gs;
-        print $counts_tmp_file join "\t", $chr, $start, $stop, $gene, $target, $regioncov."\n";
-        }else{
-            die 'ERROR ## Incorrect BED file format at line '.$. .' containing '.$line.' this does not match ^\S+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,} , please check your BED file before processing.\n';
+    }else{
+        my $mosdepth_inputBed_file   = File::Temp->new( TEMPLATE => 'tempXXXXX', SUFFIX => '.bed'  );
+        foreach my $line (@bedfile){
+            $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
+            chomp $line;
+            my @array = split("\t", $line); #read line, split by tab
+            my $chr = shift @array;
+            my $start = shift @array;
+            my $end = shift @array;
+            my $name = $array[0].">>".$array[1];
+
+            my $line = join "\t", ( $chr,  $start, $end, $name."\n" );
+            print $mosdepth_inputBed_file $line;
         }
+        my $prefix = int(rand(10000000));
+        my $fastmode = ($params->{mosdepth_fastmode} ? "-x" : "");
+        if ($params->{mosdepth_threads} > 4){
+            $params->{mosdepth_threads} = 4;
+            print STDERR "mosdepth-threads reset to max of 4\n";
+        }elsif($params->{mosdepth_threads} <= 0){
+            $params->{mosdepth_threads} = 1;
+            print STDERR "mosdepth-threads reset to min of 1\n";
+        };
+        my $extractcov = join " ", ( "mosdepth", 
+                                    "-t", $params->{mosdepth_threads},
+                                    "-b", $mosdepth_inputBed_file->filename(),
+                                    "-n",
+                                    $fastmode,
+                                    $prefix,
+                                    $bam
+                                );
+        CmdRunner($extractcov);
+        open (COVERAGE, "zcat $prefix.regions.bed.gz |") or die "Cannot zcat file: $prefix.regions.bed.gz\n";
+        foreach my $line (<COVERAGE>){
+            my @fields = split ("\t", $line);
+            my $chr       = shift @fields;
+            my $start     = shift @fields;
+            my $stop      = shift @fields;
+            my ($gene, $target) = split ('>>', shift @fields);
+            my $regioncov = shift @fields;;
+
+            print $counts_tmp_file join "\t", $chr, $start, $stop, $gene, $target, $regioncov."\n";
+        }
+        close(COVERAGE);
+        unlink  glob "$prefix.*";
     }
-    
+
     $counts_tmp_file->seek( 0, 0 );
     my @file_data= <$counts_tmp_file>;
     my $args;
@@ -2573,8 +2597,8 @@ sub writeCountFile {
         my $genecount = $countsh->{ $gene }; #number of regions on gene
         my $genecov = ($genename/$genecount); #avg coverage per gene
         #Calculate normalized coverages
-	my $normAuto;
-	if($covchrautoval !=0){
+    my $normAuto;
+    if($covchrautoval !=0){
             $normAuto = (($coverageh->{ $key })/$covchrautoval);
         }else{$normAuto=0;}
         my $normTotal;
@@ -2787,7 +2811,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-rmDup, -sexChr, controlSamples]
 \t\t\t\t[-regionThreshold, -ratioCutOffLow, -ratioCutOffHigh, -zScoreCutOffLow, -zScoreCutOffHigh, -sampleRatioScore]
 \t\t\t\t[-percentageLessReliableTargets]
-
+\t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 
 \t\t\tPipelineFromCounts :
 \t\t\t\tStart with BAM files as input, to enable duplicate
@@ -2809,6 +2833,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-controlsDir] This is set to the same as -outputDir
 \t\t\t\tOPTIONAL:
 \t\t\t\t[-rmDup, ]
+\t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 
 \t\t\tStartWithBam :
 \t\t\t\tStart with BAM files as input, to enable duplicate
@@ -2817,6 +2842,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-inputDir, -outputDir, -bed, -controlsDir]
 \t\t\t\tOPTIONAL:
 \t\t\t\t[-rmDup, -useSampleAsControl, -ampliconcov]
+\t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 
 \t\t\tStartWithAvgCount :
 \t\t\t\tStart with Average Count files as input. This is a five column text file
@@ -2905,6 +2931,17 @@ PARAMETERS:
 
 -ampliconcov\tConfigure to only select amplicons spanning the target regions by fraction
 \t\t\tso overlapping targets aren't counted twice in the overlapping bases(for iontorrent).
+
+-mosdepth-fast-mode negatable with prefix no (i.e -nomosdepth-fast-mode)\t
+\t\t\tThis is on my default and activates fast mode counting on mosdepth
+\t\t\tIn this mode mosdepth does not look at internal cigar operations or correct mate overlaps for depth calculation
+\t\t\t(recommended for most use-cases).  DEFAULT: ON
+
+
+-mosdepth-threads\t Defaults to max the max - 4 threads, any larger number will be ignored\n
+\t\t\tThis defines how many threads mosdepth can use in its calculations (1 .. 4). DEFAULT: 4
+
+
 #########################################################################################################
 
 EOF
@@ -2917,7 +2954,7 @@ sub CmdRunner {
 
         warn localtime( time() ). " [INFO] system call:'". $cmd."'.\n";
 
-	#safety for everything
+    #safety for everything
         @{$ret} = `set -e -o pipefail; ($cmd)`;
         if ($? == -1) {
                 die localtime( time() ). " [ERROR] failed to execute: $!\n";
