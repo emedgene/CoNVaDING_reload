@@ -10,6 +10,7 @@ use List::Util qw(sum);
 use Math::Complex;
 use POSIX qw(ceil);
 use POSIX qw(floor);
+use Term::ProgressBar;
 use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 use Data::Dumper;
@@ -82,7 +83,8 @@ GetOptions(
     "targetQcList:s"                  => \$params->{targetQcList}, #optional
     "percentageLessReliableTargets:s" => \$params->{percentageLessReliableTargets}, #optional
     "samtoolsdepthmaxcov:i"           => \$params->{samtoolsdepthmaxcov},#optional for startwitham
-    "ampliconcov:f"                     => \$params->{ampliconcov},#optional for startwithbam
+    "ampliconcov:f"                   => \$params->{ampliconcov},#optional for startwithbam
+    "verbose"                         => \$params->{verbose},
     "h|help"                          => sub { usage() and exit(1)},
     "version"                         => sub { print "CoNVaDING relaod v".$version_reload." modified fork from CoNVaDING v".$version."\n" and exit(1)}
 );
@@ -2360,7 +2362,14 @@ sub countFromBam {
     my $counts_tmp_file   = File::Temp->new( TEMPLATE => 'tempXXXXX', SUFFIX => '.txt'  );
 
     print $counts_tmp_file uc(join("\t", 'chr', 'start', 'stop', 'gene', 'target', 'regioncov'."\n"));
+    my $progress = Term::ProgressBar->new({
+      name  => "Counts on $bam",
+      count => scalar @bedfile,
+      ETA   => 'linear',
+    }
+    );
     foreach my $line (@bedfile){
+        $progress->update();
         $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         chomp $line;
         if ($line =~ m/^\S+\t[0-9]{1,}\t[0-9]{1,}\t[A-Za-z0-9]{1,}/gs){ #Check if line corresponds to chr, start, stop (Should we check if there is a genename, or do we assume this? Otherwise we could check regions and autoincrement them)
@@ -2373,54 +2382,63 @@ sub countFromBam {
             my $extractcov;
             if($params -> {ampliconcov}){
 		#amplicon coverage mode/iontorrent 
-                $extractcov = join(' ' , ("samtools view  $bam -H |",
-					" perl -wne 'if(s/^\\\@SQ\\tSN://){s!LN:!!; print};' > $bam.genome ; ".'echo -e "'.$chr.'\t'.$start.'\t'.$stop.'" > '.$bam.'.bed;',
-					"bedtools intersect  -g ",
-					" $bam.genome",
-			  		"-F ".$params -> {ampliconcov}."  -f ".$params -> {ampliconcov}."  -u  -sorted  -a $bam  -b $bam.bed ",
-					"> ${bam}_tmp.bam;",
-					"samtools index ${bam}_tmp.bam;",
-					"samtools depth -d ",$params -> {samtoolsdepthmaxcov}," -r  ".$chr.":".$start."-".$stop." -a -Q 0 -q 0 ${bam}_tmp.bam ",'| awk \'BEGIN {
-                                                        sum = 0;
-                                                     }{
-       	       	       	       	       	                 if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
-       	       	       	       	       	           	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
-       	       	       	       	       	       	               	exit 1;
-       	       	       	       	       	       	         };
-       	       	       	       	       	           	       	sum+=$3;
-       	       	       	       	       	             } END {
-       	       	       	       	       	           	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
-                                                        	print sum/NR;
-                                                        }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
-                                                        	print 0;
-                                                        }else{} 
-       	       	       	       	       	             }\';',"rm ${bam}_tmp.bam "));
+                $extractcov =   "samtools view  $bam -H | ".
+                                "perl -wne 'if(s/^\\\@SQ\\tSN://){s!LN:!!; print};' > ${bam}.genome ; ".
+                                'echo -e "'.$chr.'\t'.$start.'\t'.$stop.'" > '.$bam.'.bed; '.
+                                "bedtools intersect  -g ${bam}.genome -F ".$params->{ampliconcov}." -f ".$params->{ampliconcov}." -u  -sorted  -a $bam  -b $bam.bed > ${bam}_tmp.bam ; ".
+                                "samtools index ${bam}_tmp.bam; ".
+                                "samtools depth -d ".$params->{samtoolsdepthmaxcov}." -r ".$chr.":".$start."-".$stop." -a -Q 0 -q 0 ${bam}_tmp.bam ".
+                                '| awk \'
+                                    BEGIN {
+                                        sum = 0;
+                                    }
+                                    {
+                                        if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
+                                            print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params->{samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
+                                            exit 1;
+                                        };
+                                        sum+=$3;
+                                    } 
+                                    END {
+                                        if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
+                                            print sum/NR;
+                                        }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
+                                            print 0;
+                                        }else{} 
+                                    }\' ;'.
+                                "rm ${bam}_tmp.bam";
             }else{
                 #regular mode
                 $extractcov = join " ", ( "samtools", 
                                             "depth",
                                             "-d",$params -> {samtoolsdepthmaxcov},
-                                            "-r",
-                                            $chr.":".$start."-".$stop,
+                                            "-r",$chr.":".$start."-".$stop,
                                             "-a",
                                             "-q",0,
                                             "-Q",0,
                                             $bam,
-       	       	       	           	       	'| awk \'BEGIN {
-                                                        sum = 0
-                                                     }{  
-       	       	       	       	       	                 if($3 == '.$params -> {samtoolsdepthmaxcov}. '){
-       	       	       	       	       	           	       	print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params -> {samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
-       	       	       	       	       	       	               	exit 1;
-       	       	       	       	       	       	         };
-       	       	       	       	       	           	       	sum+=$3
-       	       	       	       	       	             } END {
-       	       	       	       	       	           	if(NR > 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ){
-                                                        	print sum/NR
-                                                        }else if (NR == 0 && $3 < '.$params -> {samtoolsdepthmaxcov}.' ) {
-                                                        	print 0
-                                                        }else{} 
-       	       	       	       	       	             }\'');
+                                            '| awk \'
+                                                BEGIN {
+                                                    sum = 0
+                                                }
+                                                {  
+                                                    if($3 == '.$params->{samtoolsdepthmaxcov}. '){
+                                                        print "ERROR: Depth is equal to maxcov, please set the option -samtoolsdepthmaxcov '.$params->{samtoolsdepthmaxcov}.' to a higher value. (Stacktrace is safe to ignore)" >"/dev/stderr";
+                                                        exit 1;
+                                                    };
+                                                    sum+=$3
+                                                } 
+                                                END {
+                                                    if(NR > 0 && $3 < '.$params->{samtoolsdepthmaxcov}.' ){
+                                                        print sum/NR;
+                                                    }else{ 
+                                                        if (NR == 0 && $3 < '.$params->{samtoolsdepthmaxcov}.' ) {
+                                                       	    print 0;
+                                                        }
+                                                    } 
+                                                }
+                                                \'
+                                            ');
            }
         my $regioncov = join("\n",CmdRunner($extractcov));
         chomp $regioncov;
@@ -2530,7 +2548,7 @@ sub calcCovAutoSex {
     my $covchralllength = ($covchrautolength + $covchrsexlength);
     #calculate average coverage for all chromosomes and autosomal chromosomes only
     #this errors on zero why?
-    warn Dumper(@_,$covchrautolength,$covchrsexlength)." ";
+    #warn Dumper(@_,$covchrautolength,$covchrsexlength)." ";
     $covchrall = ($covchrallsum/$covchralllength);
     #if sample does not have targets in sex chromossomes $covchrautolength is 0 and calculation fails
     if ($covchrautolength == 0){
@@ -2905,6 +2923,9 @@ PARAMETERS:
 
 -ampliconcov\tConfigure to only select amplicons spanning the target regions by fraction
 \t\t\tso overlapping targets aren't counted twice in the overlapping bases(for iontorrent).
+
+-verbose\t outputs extra information about system calls like samtools dept calls for ever target, 
+\t\t\tnot only if there are any errors
 #########################################################################################################
 
 EOF
@@ -2915,10 +2936,12 @@ sub CmdRunner {
         my $ret;
         my $cmd = join(" ",@_);
 
-        warn localtime( time() ). " [INFO] system call:'". $cmd."'.\n";
+        if (defined $params->{verbose}){
+            warn localtime( time() ). " [INFO] system call:'". $cmd."'.\n";
+        }
 
 	#safety for everything
-        @{$ret} = `set -e -o pipefail; ($cmd)`;
+        @{$ret} = `($cmd)`;
         if ($? == -1) {
                 die localtime( time() ). " [ERROR] failed to execute: $!\n";
         }elsif ($? & 127) {
@@ -2928,7 +2951,9 @@ sub CmdRunner {
                 die localtime( time() ). " [ERROR] " .sprintf "child died with signal %d, %s coredump",
                  ($? & 127),  ($? & 128) ? 'with' : 'without';
         }else {
-               	warn localtime( time() ). " [INFO] " . sprintf "child exited with value %d\n", $? >> 8;
+            if (defined $params->{verbose}){
+                warn localtime( time() ). " [INFO] " . sprintf "child exited with value %d\n", $? >> 8;
+            }
         }
 	return @{$ret};
 }
