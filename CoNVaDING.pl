@@ -15,9 +15,7 @@ use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 use Data::Dumper;
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
-#my $version_reload = "1.3";
-#my $version = "1.2.1" ;
-our $VERSION = '1.3.13';
+our $VERSION = '1.4';
 my $version_reload = $VERSION;
 my $version = $VERSION;
 
