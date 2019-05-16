@@ -15,7 +15,7 @@ use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 use Data::Dumper;
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
-our $VERSION = '1.4';
+our $VERSION = '1.4.1';
 my $version_reload = $VERSION;
 my $version = $VERSION;
 
@@ -396,8 +396,8 @@ sub generateTargetQcListMode{
     print STDERR "\n\nSamples failing sample CV threshold of ".$params->{sampleRatioScore}.":\n\n";
     
     my @passSampleRatioSamples;
+    my $dirname= $tmpStartWithBestScore->dirname;
     foreach my $logfile (@logfiles){
-        my $dirname= $tmpStartWithBestScore->dirname;
         my $grep = `grep SAMPLE_CV: $dirname/$logfile`;
         chomp $grep;
         if ($grep =~ m/SAMPLE_CV: ([0-9].+)/gs){ #Check if sampleratio is below threshold(default 0.09), otherwise don't use it in targetlist analysis
@@ -476,6 +476,7 @@ sub createFinalList{
     for (my $i=1; $i<=$lastFileIdx; $i++){ #Iterate over lines in file
         my $line=$file[$i];
         chomp $line;
+        $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         my @lines=split("\t",$line);
         my $chr = $lines[$chrIdx];
         my $start = $lines[$startIdx];
@@ -531,6 +532,7 @@ sub createFinalList{
         for (my $k=1; $k<=$lastFileIdx; $k++){
             my $line=$file[$k];
             chomp $line;
+            $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
             my @lines=split("\t",$line);
             my $chr=$lines[$chrIdx];
             $chr =~ s/X/23/g;
@@ -577,13 +579,15 @@ sub createFinalList{
                 my $n_targets_SHAPIRO = shift @fields;
                 my $abberation = shift @fields;
 
-                my $namestring =  "Name=".$abberation.":".$gene_targets.";".
-                                  "Note=NUMBER_OF_TARGETS:".$n_targets.",".
-                                  "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST:".$n_targets_SHAPIRO.";";
+                my $namestring =  "Name=".$abberation.">>$gene>>chr$chr:$start-$end;".
+                                  "Gene=".$gene.";".
+                                  "GeneTargets=".$gene_targets.";".
+                                  "TypeAberration=".$abberation.";".
+                                  "NUMBER_OF_TARGETS=".$n_targets.";".
+                                  "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST=".$n_targets_SHAPIRO.";";
                 $outputfileBedToWrite .= join "\t", $chr,
                                                     $start,
                                                     $end,
-                                                    $gene,
                                                     $namestring."\n";
             }
         }
@@ -638,6 +642,7 @@ sub generateTargetQcList{
         for (my $i=1; $i<=$lastFileIdx; $i++){ #Iterate over lines in file
             my $line=$file[$i];
             chomp $line;
+            $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
             my @lines=split("\t",$line);
             my $chr = $lines[$chrIdx];
             my $start = $lines[$startIdx];
@@ -688,7 +693,9 @@ sub generateTargetQcList{
     $params->{inputdir} = $params->{inputdirOriginal};   
     
     #Write output to file
-    my $outputfile = $params->{targetQcList}; #Output filename
+    my $outputfile = ($params->{targetQcList} ? $params->{targetQcList} : $params->{outputdir}."/targetQcList.txt");
+
+
     writeOutput($outputfile, $outputToWrite); #Write output to above specified file
     
 
@@ -1092,6 +1099,7 @@ sub startWithBestScore{
         for (my $i=1; $i<=$lastLineIdx; $i++){
             my $line = $inputfiledata[$i];
             chomp $line;
+            $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
             my @array = split("\t", $line);
             my $avgBestMatchScoreVal = $array[$avgBestMatchScoreValIdx];
             push(@avgBestMatchScores, $avgBestMatchScoreVal);
@@ -1674,11 +1682,12 @@ sub createOutputLists{
                                                  $abberationCountToPrint,
                                                  $shapPassCount,
                                                  $abberation."\n";
-
-                my $namestring =  "Name=".$abberation.":".$target_gene_abberation_interval.";".
-                                  "Note=NUMBER_OF_TARGETS:".$abberationCountToPrint.",".
-                                  "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST:".$shapPassCount.";";
-                                                             
+                my $namestring =  "Name=".$abberation.">>$gene>>chr$chrPrev:$startPrev-$stop;".
+                                  "Gene=".$gene.";".
+                                  "GeneTargets=".$target_gene_abberation_interval.";".
+                                  "TypeAberration=".$abberation.";".
+                                  "NUMBER_OF_TARGETS=".$abberationCountToPrint.";".
+                                  "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST=".$shapPassCount.";";
                 $outputfileLongBedToWrite .= join "\t", $chrPrev,
                                                         $startPrev,
                                                         $stop,
@@ -1707,11 +1716,12 @@ sub createOutputLists{
                                                       $abberationCountToPrint,
                                                       $shapPassCount,
                                                       $abberation."\n";
-                                                      
-                    my $namestring =  "Name=".$abberation.":".$target_gene_abberation_interval.";".
-                                      "Note=NUMBER_OF_TARGETS:".$abberationCountToPrint.",".
-                                      "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST:".$shapPassCount.";";
-
+                    my $namestring =  "Name=".$abberation.">>$gene>>chr$chr_print:$start_print-$stop;".
+                                      "Gene=".$gene.";".
+                                      "GeneTargets=".$target_gene_abberation_interval.";".
+                                      "TypeAberration=".$abberation.";".
+                                      "NUMBER_OF_TARGETS=".$abberationCountToPrint.";".
+                                      "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST=".$shapPassCount.";";
                     $outputfileShortBedToWrite .= join "\t", $chr_print,
                                                              $start_print,
                                                              $stop,
@@ -1811,11 +1821,12 @@ sub createOutputLists{
                                                       $abberationCountToPrint,
                                                       $shapPassCountHOM,
                                                       $abberation."\n";
-
-                    my $namestring =  "Name=".$abberation.":".$target_gene_abberation_interval.";".
-                                      "Note=NUMBER_OF_TARGETS:".$abberationCountToPrint.",".
-                                      "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST:".$shapPassCountHOM.";";
-                                                             
+                    my $namestring =  "Name=".$abberation.">>$gene>>chr$chrP:$startP-$stop;".
+                                      "Gene=".$gene.";".
+                                      "GeneTargets=".$target_gene_abberation_interval.";".
+                                      "TypeAberration=".$abberation.";".
+                                      "NUMBER_OF_TARGETS=".$abberationCountToPrint.";".
+                                      "NUMBER_OF_TARGETS_PASS_SHAPIRO-WILK_TEST=".$shapPassCountHOM.";";
                     $outputfileShortBedToWrite .= join "\t", $chrP,
                                                              $startP,
                                                              $stop,
@@ -2122,6 +2133,7 @@ sub createNormalizedCoverageFiles {
     for (my $i=1; $i<=$lastFileIdxSample; $i++){ #Extract information from sample file
         my $lineSample=$inputfile[$i];
         chomp $lineSample;
+        $lineSample =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         my @linesSample=split("\t",$lineSample);
         my $chrSample=$linesSample[$chrIdxSample];
         $chrSample =~ s/^X/23/;
@@ -2184,6 +2196,7 @@ sub createNormalizedCoverageFiles {
                 for (my $i=1; $i<=$lastFileIdxSample; $i++){ #Extract information from sample file
                     my $lineSample=$inputfile[$i];
                     chomp $lineSample;
+                    $lineSample =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
                     my @linesSample_fields = split("\t",$lineSample);
                     my $chrSample      = $linesSample_fields[$chrIdxSample];
                     $chrSample =~ s/^X/23/;
@@ -2280,6 +2293,8 @@ sub createNormalizedCoverageFiles {
 #Grep column indices and push into array
 sub getColumnIdx {
     my $header = shift;
+    $header =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
+    chomp $header;
     my ($colnames) = @_;
     my @headerarray = split("\t", $header);
     my @indices;
@@ -2498,6 +2513,7 @@ sub countFromBam {
         open (COVERAGE, "zcat $prefix.regions.bed.gz |") or die "Cannot zcat file: $prefix.regions.bed.gz\n";
         foreach my $line (<COVERAGE>){
             chomp $line;
+            $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
             my @fields = split ("\t", $line);
             my $chr       = shift @fields;
             my $start     = shift @fields;
@@ -2548,6 +2564,7 @@ sub calcGeneCov {
     for (my $i=1; $i<=$args->{lastFileIdx}; $i++){
         my $line=$file[$i];
         chomp $line;
+        $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         my @lines=split("\t",$line);
         my $chr   =$lines[$args->{chrIdx}];
         $chr =~ s/chr//gs; #Remove "chr" from chromosomes
@@ -2555,7 +2572,7 @@ sub calcGeneCov {
         my $start =$lines[$args->{startIdx}];
         my $stop  =$lines[$args->{stopIdx}];
         my $gene  =$lines[$args->{geneIdx}];
-        my $target=(defined $args->{targetIdx} ? $lines[$args->{targetIdx}] : "");
+        my $target=(defined $args->{targetIdx} ? $lines[$args->{targetIdx}] : "-");
         my $regcov=$lines[$args->{regcovIdx}];
         my $key = $line;
         #Calculate coverage from regions
@@ -2636,6 +2653,7 @@ sub writeCountFile {
     for (my $i=1; $i<=$args->{lastFileIdx}; $i++){
         my $line=$file[$i];
         chomp $line;
+        $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         my @lines=split("\t",$line);
         my $chr   =$lines[$args->{chrIdx}];
         $chr =~ s/chr//gs; #Remove "chr" from chromosomes
@@ -2752,6 +2770,7 @@ sub getChrMatch{
     my %chrs_on_bed;
     my %chrs_on_bam;
     foreach my $line (@$bed){
+        chomp $line;
         $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         my @fields = split /\s/, $line; # split on space because bed files can be split on empty space (this can be regulat space characters or tabs)
         if ($fields[0] =~ m/^chr.+/gs) { #Line starts with chr, so UCSC style
@@ -2775,6 +2794,8 @@ sub getChrMatch{
     my @bamHeaderLines = split("\n", $bamHeader);
     
     foreach my $line (@bamHeaderLines){
+        chomp $line;
+        $line =~ s/(?>\x0D\x0A?|[\x0A-\x0C\x85\x{2028}\x{2029}])//; #Remove Unix and Dos style line endings
         if ($line =~ m/^\@SQ\tSN:(.+)\tLN:.+/gs) {
             my $chr = $1;
             if ($chr =~ m/chr.+/gs) {
@@ -2861,6 +2882,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\tREQUIRED:
 \t\t\t\t[-inputDir, -outputDir, -bed, -controlsDir]
 \t\t\t\tOPTIONAL:
+\t\t\t\t[-targetQcList]
 \t\t\t\t[-rmDup, -sexChr, controlSamples]
 \t\t\t\t[-regionThreshold, -ratioCutOffLow, -ratioCutOffHigh, -zScoreCutOffLow, -zScoreCutOffHigh, -sampleRatioScore]
 \t\t\t\t[-percentageLessReliableTargets]
@@ -2873,6 +2895,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\tREQUIRED:
 \t\t\t\t[-inputDir, -outputDir, -bed, -controlsDir]
 \t\t\t\tOPTIONAL:
+\t\t\t\t[-targetQcList]
 \t\t\t\t[-rmDup, -sexChr, controlSamples]
 \t\t\t\t[-regionThreshold, -ratioCutOffLow, -ratioCutOffHigh, -zScoreCutOffLow, -zScoreCutOffHigh, -sampleRatioScore]
 \t\t\t\t[-percentageLessReliableTargets]
