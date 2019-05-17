@@ -15,7 +15,7 @@ use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 use Data::Dumper;
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
-our $VERSION = '1.4.1';
+our $VERSION = '1.4.2';
 my $version_reload = $VERSION;
 my $version = $VERSION;
 
@@ -70,10 +70,10 @@ GetOptions(
     "outputDir=s"                     => \$params->{outputdir}, # required always
     "controlsDir:s"                   => \$params->{controlsdir}, #optional
     "bed:s"                           => \$params->{bedfile}, #optional
-    "controlSamples:s"                => \$params->{numBestMatchSamplesCmdL}, #optional
+    "controlSamples:i"                => \$params->{numBestMatchSamplesCmdL}, #optional
     "regionThreshold:s"               => \$params->{regionThreshold}, #optional
     "rmDup:s"                         => \$params->{rmdup},  #optional
-    "sexChr:s"                        => \$params->{sexchr}, #optional
+    "sexChr"                          => \$params->{sexchr}, #optional
     "useSampleAsControl:s"            => \$params->{sampleAsControl}, #optional
     "ratioCutOffLow:s"                => \$params->{ratioCutOffLow}, #optional
     "ratioCutOffHigh:s"               => \$params->{ratioCutOffHigh}, #optional
