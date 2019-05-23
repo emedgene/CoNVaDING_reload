@@ -2898,11 +2898,14 @@ sub rmDupBam {
                             $rmDup_file->filename;
 
     #Execute the above defined steps
-    warn "Executed rmdup mark dups on input bam\n". join( "\n" , CmdRunner($rmdup ));
-    warn "Executed rmdupIdx: mark dups bam indexing\n". join( "\n" , CmdRunner($rmdupIdx ));
-    warn "Executed sam: hard remove dup reads and store to sam\n". join( "\n" , CmdRunner($sam ));
-    warn "Executed sam2bam: convert sam to bam\n". join( "\n" , CmdRunner($sam2bam ));
-    warn "Executed bamIdx: bam index command\n". join( "\n" , CmdRunner($bamIdx ));
+    if ($convert_cram_to_bam){
+        warn "Executed rmdup mark dups on input bam\n". join( "\n" , CmdRunner($convert_cram_to_bam));
+    }
+    warn "Executed rmdup mark dups on input bam\n". join( "\n" , CmdRunner($rmdup));
+    warn "Executed rmdupIdx: mark dups bam indexing\n". join( "\n" , CmdRunner($rmdupIdx));
+    warn "Executed sam: hard remove dup reads and store to sam\n". join( "\n" , CmdRunner($sam));
+    warn "Executed sam2bam: convert sam to bam\n". join( "\n" , CmdRunner($sam2bam));
+    warn "Executed bamIdx: bam index command\n". join( "\n" , CmdRunner($bamIdx));
     
     
     return ($rmDup_file);
