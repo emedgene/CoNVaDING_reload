@@ -74,6 +74,7 @@ GetOptions(
     "regionThreshold:s"               => \$params->{regionThreshold}, #optional
     "rmDup"                           => \$params->{rmdup},  #optional
     "sexChr"                          => \$params->{sexchr}, #optional
+    "fasta|fasta_file|fa"             => \$params->{fasta}, #optional
     "useSampleAsControl:s"            => \$params->{sampleAsControl}, #optional
     "ratioCutOffLow:s"                => \$params->{ratioCutOffLow}, #optional
     "ratioCutOffHigh:s"               => \$params->{ratioCutOffHigh}, #optional
@@ -286,10 +287,10 @@ if ($params->{mode} eq "PipelineFromBams" || $params->{mode} eq "PipelineFromCra
         $params->{inputdir} = $params->{outputdir};
     }
     createFinalListMode();
-#Start analysis from BAM file
-$params->{mode} eq "addToControls"
+#add any found CRAM or BAMs on input file to controls
 }elsif ($params->{mode} eq "addToControls"){
     addToControlsMode();
+#Start analysis from BAM file
 }elsif ($params->{mode} eq "StartWithBam"){ 
     startWithBamMode();
 #Start analysis from CRAM file
