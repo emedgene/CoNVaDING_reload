@@ -15,7 +15,7 @@ use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 use Data::Dumper;
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
-our $VERSION = '1.5.2';
+our $VERSION = '1.5.3';
 my $version_reload = $VERSION;
 my $version = $VERSION;
 
@@ -87,6 +87,7 @@ GetOptions(
     "samtools-depth"                  => \$params->{samtools_depth},
     "mosdepth-fast-mode!"             => \$params->{mosdepth_fastmode},#on by default
     "mosdepth-threads:i"              => \$params->{mosdepth_threads},#4 by by default (max)
+    "mosdepth-median"                 => \$params->{mosdepth_median},
     "verbose"                         => \$params->{verbose},
     "h|help"                          => sub { usage() and exit(1)},
     "version"                         => sub { print "CoNVaDING relaod v".$version_reload." modified fork from CoNVaDING v".$version."\n" and exit(1)}
@@ -2557,6 +2558,7 @@ sub countFromBam{
                                         "-b", $mosdepth_inputBed_file->filename(),
                                         "-n",
                                         "-f", $params->{fasta},
+                                        ($params->{mosdepth_median} ? --median : ""),
                                         $fastmode,
                                         $prefix,
                                         $bam
@@ -2566,6 +2568,7 @@ sub countFromBam{
                                         "-t", $params->{mosdepth_threads},
                                         "-b", $mosdepth_inputBed_file->filename(),
                                         "-n",
+                                        ($params->{mosdepth_median} ? --median : ""),
                                         $fastmode,
                                         $prefix,
                                         $bam
@@ -3099,10 +3102,13 @@ PARAMETERS:
 -samtools-depth\tThe default for the script now is mosdepth... use this flag to retain the original
 \t\t\tsamtools dept calculation mode
 
--mosdepth-fast-mode\tScript used mossdepth cor coverage calculation and has the fast-mode on by default (the -x argument)
+-mosdepth-fast-mode\tScript uses mossdepth coverage calculation and has the fast-mode on by default (the -x argument)
 \t\t\tIf you don't want fast mode add prefix no to command (-nomosdepth-fast-mode) 
 
 -mosdepth-threads\tOn by default with 4 threads (the max allowed by mosdept), use a integet between 0 and 4 to adjust
+
+-mosdepth-median\tOff unless specified. This option will output the median depth coverage of the input regions instead of the
+\t\t\tdefault mean. This is only available for mosdept version 0.2.6 and above.
 
 -verbose\t outputs extra information about system calls like samtools dept calls for ever target, 
 \t\t\tnot only if there are any errors
