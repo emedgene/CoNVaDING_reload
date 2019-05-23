@@ -345,7 +345,7 @@ sub addToControlsMode{
     startWithCram(\@inputCRAMiles);
     my @inputBAMfiles = readFile($params->{inputdir}, ".bam");
     #Start analysis from BAM file
-    startWithBam(\@inputfiles);
+    startWithBam(\@inputBAMfiles);
 }
 
 
@@ -802,7 +802,7 @@ sub startWithBam{
             }
             
             print STDERR "Starting counts analysis..\n";
-            countFromBam($file_to_count, $file, $ext);
+            countFromBamOrCram($file_to_count, $file, $ext);
         }
     }    
 }
@@ -823,7 +823,7 @@ sub startWithCram{
         unless (-e $params->{inputdir}."/".$bai_file) {
             #Don't process this file, because it doesn't have an indexfile
             print  STDERR  "##### WARNING #####WARNING #####\n".
-                            "Cannot find an index file for file: ".$params->{inputdir}."/".$bam."\n".
+                            "Cannot find an index file for file: ".$params->{inputdir}."/".$cram."\n".
                             "\t,skipping this file from analysis\n".
                             "##### WARNING ##### WARNING #####\n\n";
         }else{
@@ -834,15 +834,16 @@ sub startWithCram{
             #Check if duplicates need to be removed
             if (defined $params->{rmdup}){
                 #Process BAM files generating duplicate removed BAM files
-                rmDupCram($bam, $rmdup_bam, $tmp_dir);
+                rmDupBam($cram, $rmdup_bam, $tmp_dir);
                 print STDERR "Starting counts analysis..\n"; #Start to count regions
                 $file_to_count = $rmdup_bam;
+                $ext = "bam";
             }else{ #BAM files are already rmdupped, add them to list of files to process (retrieve them from inputdir cmdline)
-                $file_to_count = $params->{inputdir}."/".$bam;
+                $file_to_count = $params->{inputdir}."/".$cram;
             }
             
             print STDERR "Starting counts analysis..\n";
-            countFromBam($file_to_count, $file, $ext);
+            countFromBamOrCram($file_to_count, $file, $ext);
         }
     }    
 }
@@ -2467,7 +2468,7 @@ sub writeOutput {
 }                                                             
 
 #Create avg count files from BAM
-sub countFromBam {
+sub countFromBamOrCram {
     my $bam = shift;
     my $ori_file_name = shift;
     my $ext = shift;
@@ -2622,7 +2623,7 @@ sub countFromBam {
                                         "-t", $params->{mosdepth_threads},
                                         "-b", $mosdepth_inputBed_file->filename(),
                                         "-n",
-                                        "-f", $params->{fasta_file},
+                                        "-f", $params->{fasta},
                                         $fastmode,
                                         $prefix,
                                         $bam
@@ -2845,14 +2846,31 @@ sub rmDupBam {
     #creating additional temp files
     my $rmdup_bam   = File::Temp->new( TEMPLATE => 'tempXXXXX',DIR => $tmp_dir, SUFFIX => '.rmdup.bam'  );
     my $aligned_sam = File::Temp->new( TEMPLATE => 'tempXXXXX',DIR => $tmp_dir, SUFFIX => '.aligned.only.sam');
+    my $bam_temp   = File::Temp->new( TEMPLATE => 'tempXXXXX',DIR => $tmp_dir, SUFFIX => '.bam'  );
 
     #Clean this up should be something like  samtools rmdup input.bam | samtools view -Sb -h -F 0x400 >  rmdup.bam && samtools index rmdup.bam
+    my $convert_cram_to_bam;
+    my $rmdup;
+    if ($ext =~ /cram/i){
+        $convert_cram_to_bam = join " ",   "samtools",
+                                                "view",
+                                                "-T", $params->{fasta},  
+                                                "-b",
+                                                "-o" $bam_temp->filename;
+                                                $params->{inputdir}."/".$bam,
+        #Mark duplicates command
+        $rmdup = join " ",   "samtools",
+                                "rmdup",
+                                $bam_temp->filename,
+                                $rmdup_bam->filename;
 
-    #Mark duplicates command
-    my $rmdup = join " ",   "samtools",
-                            "rmdup",
-                            $params->{inputdir}."/".$bam,
-                            $rmdup_bam->filename;
+    }else{
+        #Mark duplicates command
+        $rmdup = join " ",   "samtools",
+                                "rmdup",
+                                $params->{inputdir}."/".$bam,
+                                $rmdup_bam->filename;
+    }
     #Create rmdup index command
     my $rmdupIdx = join " ",    "samtools",
                                 "index",
