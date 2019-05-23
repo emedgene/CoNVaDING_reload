@@ -2475,7 +2475,7 @@ sub countFromBamOrCram {
     my $ext = shift;
     #Specify header to write in outputfile
     my $outputToWrite = "CHR\tSTART\tSTOP\tGENE\tTARGET\tREGION_COV\tAVG_AUTOSOMAL_COV\tAVG_TOTAL_COV\tAVG_GENE_COV\tNORMALIZED_AUTOSOMAL\tNORMALIZED_TOTAL\tNORMALIZED_GENE\n";
-    my ($file,$dir,$ext) = fileparse($ori_file_name, qr/\.[^.]*/);
+    my ($file,$dir,$ext_original) = fileparse($ori_file_name, qr/\.[^.]*/);
     open (BED, "< ".$params->{bedfile}) or die "Cannot open file: ".$params->{bedfile}."\n";
     my @bedfile = <BED>;
     close(BED);
@@ -2857,7 +2857,7 @@ sub rmDupBam {
                                                 "view",
                                                 "-T", $params->{fasta},  
                                                 "-b",
-                                                "-o" $bam_temp->filename;
+                                                "-o" $bam_temp->filename,
                                                 $params->{inputdir}."/".$bam,
         #Mark duplicates command
         $rmdup = join " ",   "samtools",
