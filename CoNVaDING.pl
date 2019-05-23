@@ -152,6 +152,8 @@ if ($params->{mode} eq "addToControls"){
     }
     if (not defined $params->{controlsDir} && not defined $params->{outputdir}){
         die "Required --controlsDir or --outputDir not defined, please specify to continue analysis.\n";
+    }elsif(defined $params->{controlsDir} && defined $params->{outputdir} && $params->{controlsDir} != $params->{outputdir}){
+        die "in addToControls both controlsDir and outputDir should be the same. Only need to define 1 or the two\n";
     }elsif(not defined $params->{controlsDir}){
         $params->{controlsDir} = $params->{outputdir};
     }elsif(not defined $params->{outputdir}){
@@ -2972,8 +2974,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-samtools-depth]
 
 \t\t\tPipelineFromCounts :
-\t\t\t\tStart with BAM files as input, to enable duplicate
-\t\t\t\tremoval use the rmdup variable.
+\t\t\t\tStart with counts files as input, 
 \t\t\t\tREQUIRED:
 \t\t\t\t[-inputDir, -outputDir, -bed, -controlsDir]
 \t\t\t\tOPTIONAL:
@@ -2988,10 +2989,10 @@ Usage: $0 <mode> <parameters>
 \t\t\t\tREQUIRED:
 \t\t\t\t[-inputDir, -outputDir, -bed, -fasta (only if any input is Cram)]
 \t\t\t\tOverWritten:
-\t\t\t\t[-useSampleAsControl} this is necessarity true on this mode
+\t\t\t\t[-useSampleAsControl] this is necessarity true on this mode
 \t\t\t\t[-controlsDir] This is set to the same as -outputDir
 \t\t\t\tOPTIONAL:
-\t\t\t\t[-rmDup, ]
+\t\t\t\t[-rmDup ]
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 \t\t\t\t[-samtools-depth]
 
