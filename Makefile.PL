@@ -27,7 +27,7 @@ $extdeps = [
 	},
 	{	"dep" => "mosdepth",
 		"test" => "mosdepth --version",
-		"hint" => 'wget https://github.com/brentp/mosdepth/releases/download/v0.2.5/mosdepth && chmod +x ./mosdepth && export PATH=$(pwd):$PATH'
+		"hint" => 'wget https://github.com/brentp/mosdepth/releases/download/v0.2.6/mosdepth && chmod +x ./mosdepth && export PATH=$(pwd):$PATH'
 	}
 ];
 

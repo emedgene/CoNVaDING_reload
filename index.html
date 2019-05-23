@@ -8839,7 +8839,7 @@ AAAAAAAAgAEAAA==">
   <div class="page-header">
     <h1>1. <a id="X5"></a>Introduction</h1>
   </div>
-<p>CoNVaDING (Copy Number Variation Detection In Next-generation sequencing Gene panels) was designed for small (single-exon) copy number variation (CNV) detection in high coverage next-generation sequencing (NGS) data, such as obtained by analysis of smaller targeted gene panels.</p>
+<p>CoNVaDING_reload is a fork of CoNVaDING that adds additional features and user modalities to the original project called CoNVaDING. CoNVaDING (Copy Number Variation Detection In Next-generation sequencing Gene panels) was designed for small (single-exon) copy number variation (CNV) detection in high coverage next-generation sequencing (NGS) data, such as obtained by analysis of smaller targeted gene panels.</p>
 <p>CoNVaDING makes use of a group of (at least 30) possible control samples from which the samples with the most similar overall pattern are selected as control samples. These samples are then used for read-depth normalization on all (autosomal) targets and on all targets per gene. CNV prediction is based on a combination of ratio scores and Z-scores of the sample of interest compared to the selected controlsamples.</p>
 <p>Quality (QC) metrics are calculated per sample and per analyzed target. Output is generated on three levels:</p>
 <ul>
@@ -8860,7 +8860,8 @@ final list: This list contains a subset of the shortlist, filtered on target QC 
   <div class="page-header">
     <h1>2. Installation</h1>
   </div>
-<p>The latest version of CoNVaDING can be downloaded from <a id="X1"></a>DOWNLOADSITE[here].</p>
+<p>The latest version of CoNVaDING_reload can be downloaded from <a href="https://github.com/duartemolha/CoNVaDING_reload/releases" id="X1"></a>CoNVaDING_reload releases.</p>
+<p>The original CoNVaDING can be downloaded from <a href="https://github.com/molgenis/CoNVaDING/releases" id="X1"></a>CoNVaDING releases.</p>
 <p>CoNVaDING has several dependencies:</p>
 <ul>
 <li>
@@ -8872,9 +8873,12 @@ The <a id="X1"></a><a href="http://search.cpan.org/~mwendl/Statistics-Normality-
 <li>
 <a id="X1"></a><a href="http://www.htslib.org/">Samtools</a>
 </li>
+<li>
+    <a id="X1"></a><a href="https://github.com/brentp/mosdepth/releases">MosDepth</a>
+    </li>
 </ul>
-<p>After installation the samtools executable has to be added to your local environment using the $PATH variable.</p>
-<p>This version is known to be compatible with SAMtools version 0.1.18 and 0.1.19</p>
+<p>After installation the samtools executable and mosdepth have to be added to your local environment using the $PATH variable.</p>
+<p>This version is known to be compatible with SAMtools version 0.1.18 and 0.1.19 and Mosdepth version 0.2.5</p>
 </section>
 <section id="general_comments">
   <div class="page-header">

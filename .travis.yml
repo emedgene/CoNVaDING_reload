@@ -4,5 +4,5 @@ perl:
 before_install:
   - sudo apt-get install -qq samtools
   - sudo apt-get install -qq bedtools
-  - wget https://github.com/brentp/mosdepth/releases/download/v0.2.5/mosdepth && chmod +x ./mosdepth && export PATH=$(pwd):$PATH
+  - wget https://github.com/brentp/mosdepth/releases/download/v0.2.6/mosdepth && chmod +x ./mosdepth && export PATH=$(pwd):$PATH
   - cpanm --installdeps --notest . || (tail -n 5000 /home/travis/.cpanm/work/*/build.log && exit 1)

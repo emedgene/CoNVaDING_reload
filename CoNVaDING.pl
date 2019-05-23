@@ -15,18 +15,17 @@ use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 use Data::Dumper;
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
-our $VERSION = '1.5.0';
+our $VERSION = '1.5.2';
 my $version_reload = $VERSION;
 my $version = $VERSION;
 
 ##############################################################################################
 ##############################################################################################
-##   CoNVaDING reload V1, copy number variation detecting in next-generation                ##
+##   CoNVaDING reload, copy number variation detecting in next-generation                   ##
 ##   sequencing gene panels                                                                 ##
 ##                                                                                          ##
 ##   this is a fork from the original program written by                                    ##
 ##   Copyright (C) 2015  Freerk van Dijk & Lennart Johansson                                ##
-##                                                                                          ##
 ##                                                                                          ##
 ##   This file is part of CoNVaDING.                                                        ##
 ##                                                                                          ##
@@ -2936,26 +2935,27 @@ sub usage {
         print STDERR <<EOF;
 
 #########################################################################################################
-   _____      _   ___      __   _____ _____ _   _  _____ 
-  / ____|    | \\ | \\ \\    / /  |  __ \\_   _| \\ | |/ ____|
- | |     ___ |  \\| |\\ \\  / /_ _| |  | || | |  \\| | |  __ 
- | |    / _ \\| . ` | \\ \\/ / _` | |  | || | | . ` | | |_ |
- | |___| (_) | |\\  |  \\  / (_| | |__| || |_| |\\  | |__| |
-  \\_____\\___/|_| \\_|   \\/ \\__,_|_____/_____|_| \\_|\\_____|
-  
+   ______        _   __ _    __        ____   ____ _   __ ______   ____         __                   __
+  / ____/____   / | / /| |  / /____ _ / __ \ /  _// | / // ____/  / __ \ ___   / /____   ____ _ ____/ /
+ / /    / __ \ /  |/ / | | / // __ `// / / / / / /  |/ // / __   / /_/ // _ \ / // __ \ / __ `// __  /
+/ /___ / /_/ // /|  /  | |/ // /_/ // /_/ /_/ / / /|  // /_/ /  / _, _//  __// // /_/ // /_/ // /_/ /
+\____/ \____//_/ |_/   |___/ \__,_//_____//___//_/ |_/ \____/  /_/ |_| \___//_/ \____/ \__,_/ \__,_/
+
 #########################################################################################################
 \t\tCoNVaDING  Copyright (C) 2015  Freerk van Dijk & Lennart Johansson
 \t\t\tAvailable under the GNU LGPLv3 license
 #########################################################################################################
 This software detects Copy Number Variants (CNVs) in sequencing data using targeted gene panels.
 
-NOTE: This software makes use of samtools (http://www.htslib.org/)
-Please make sure you have the samtools executable added to your local environment using the \$PATH variable.
+NOTE: This software makes use of samtools (http://www.htslib.org/) and mosdepth
+Please make sure you have the both executables added to your local environment using the \$PATH variable.
 
-For questions please e-mail: f.van.dijk02\@umcg.nl or l.johansson\@umcg.nl
+For questions (regarding CoNVaDING reload specificaly) please e-mail: duartemolha\@gmail.com
+For questions regarding original functionality, please email: f.van.dijk02\@umcg.nl 
+                                                              or l.johansson\@umcg.nl
 #########################################################################################################
 
-CoNVaDING software version $version
+CoNVaDING_reload software version $version
 Usage: $0 <mode> <parameters>
 -h\t\t\tThis manual.
 
