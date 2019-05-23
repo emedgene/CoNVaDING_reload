@@ -2551,29 +2551,16 @@ sub countFromBam{
             $params->{mosdepth_threads} = 1;
             print STDERR "mosdepth-threads reset to min of 1\n";
         };
-        my $extractcov;
-        if ($ext =~ /cram/i){
-            $extractcov = join " ", ( "mosdepth", 
+        my $extractcov = join " ", ( "mosdepth", 
                                         "-t", $params->{mosdepth_threads},
                                         "-b", $mosdepth_inputBed_file->filename(),
                                         "-n",
-                                        "-f", $params->{fasta},
-                                        ($params->{mosdepth_median} ? --median : ""),
+                                        ($ext =~ /cram/i ? "-f ".$params->{fasta} : ""),
+                                        (defined $params->{mosdepth_median} ? "--median" : ""),
                                         $fastmode,
                                         $prefix,
                                         $bam
                                     );
-        }else{
-            $extractcov = join " ", ( "mosdepth", 
-                                        "-t", $params->{mosdepth_threads},
-                                        "-b", $mosdepth_inputBed_file->filename(),
-                                        "-n",
-                                        ($params->{mosdepth_median} ? --median : ""),
-                                        $fastmode,
-                                        $prefix,
-                                        $bam
-                                    );
-        }
 
         CmdRunner($extractcov);
         open (COVERAGE, "zcat $prefix.regions.bed.gz |") or die "Cannot zcat file: $prefix.regions.bed.gz\n";
