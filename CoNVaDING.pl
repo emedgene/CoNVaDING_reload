@@ -15,7 +15,7 @@ use Statistics::Normality 'shapiro_wilk_test';
 use File::Temp qw/ tempfile tempdir /;
 use Data::Dumper;
 ######CHANGE VERSION PARAMETER IF VERSION IS UPDATED#####
-our $VERSION = '1.4.2';
+our $VERSION = '1.5.0';
 my $version_reload = $VERSION;
 my $version = $VERSION;
 
@@ -72,7 +72,7 @@ GetOptions(
     "bed:s"                           => \$params->{bedfile}, #optional
     "controlSamples:i"                => \$params->{numBestMatchSamplesCmdL}, #optional
     "regionThreshold:s"               => \$params->{regionThreshold}, #optional
-    "rmDup:s"                         => \$params->{rmdup},  #optional
+    "rmDup"                           => \$params->{rmdup},  #optional
     "sexChr"                          => \$params->{sexchr}, #optional
     "useSampleAsControl:s"            => \$params->{sampleAsControl}, #optional
     "ratioCutOffLow:s"                => \$params->{ratioCutOffLow}, #optional
@@ -98,7 +98,8 @@ usage() and exit(1) unless $params->{outputdir};
 #Add more parameters later
 
 #Check input parameters
-unless ($params->{mode} eq "PipelineFromBams"      ||
+unless ($params->{mode} eq "PipelineFromBams"     ||
+        $params->{mode} eq "PipelineFromCrams"    ||
         $params->{mode} eq "PipelineFromCounts"   ||
         $params->{mode} eq "addToControls"        ||
         $params->{mode} eq "StartWithBam"         ||
@@ -127,10 +128,12 @@ if (!-d $params->{outputdir}) { #Output directory does not exist, create it
 
 my @bedfile;
 #Check if BED file is specified for StartWithBam and StartWithAvgCount, else die and throw error message
-if ($params->{mode} eq "PipelineFromBams"    ||
+if ($params->{mode} eq "PipelineFromBams"   ||
+    $params->{mode} eq "PipelineFromCrams"  ||
     $params->{mode} eq "PipelineFromCounts" ||
     $params->{mode} eq "addToControls"      ||
     $params->{mode} eq "StartWithBam"       ||
+    $params->{mode} eq "StartWithCram"      ||
     $params->{mode} eq "StartWithAvgCount"){
     if (not defined $params->{bedfile}){
         die "Required BED file not specified, please specify to continue analysis.\n";
@@ -149,16 +152,22 @@ if ($params->{mode} eq "addToControls"){
         print STDERR  "#####\n#Parameter sampleAsControl forcebly defined\n#####\n";
         $params->{sampleAsControl} = 1;
     }
-    if (not defined $params->{controlsDir}){
+    if (not defined $params->{controlsDir} && not defined $params->{outputdir}){
+        die "Required --controlsDir or --outputDir not defined, please specify to continue analysis.\n";
+    }elsif(not defined $params->{controlsDir}){
         $params->{controlsDir} = $params->{outputdir};
+    }elsif(not defined $params->{outputdir}){
+        $params->{outputdir} = $params->{controlsDir};
     }
 }
 
 #Check if controlsdir exists for four param options
 #if ($params->{mode} eq "StartWithBam" || $params->{mode} eq "StartWithAvgCount" || $params->{mode} eq "StartWithMatchScore" || $params->{mode} eq "GenerateTargetQcList"){ #Check if controlsdir is specified
-if ($params->{mode} eq "PipelineFromBams"     ||
+if ($params->{mode} eq "PipelineFromBams"    ||
+    $params->{mode} eq "PipelineFromCrams"   ||
     $params->{mode} eq "PipelineFromCounts"  ||
     $params->{mode} eq "StartWithBam"        ||
+    $params->{mode} eq "StartWithCram"       ||
     $params->{mode} eq "StartWithAvgCount"   ||
     $params->{mode} eq "StartWithMatchScore" ||
     $params->{mode} eq "addToControls"       ||
@@ -175,12 +184,13 @@ if ($params->{mode} eq "PipelineFromBams"     ||
              $params->{mode} eq "addToControls"){
             mkdir $params->{controlsdir};
         }elsif($params->{mode} eq "PipelineFromBams"     ||
+               $params->{mode} eq "PipelineFromCrams"   ||
                $params->{mode} eq "PipelineFromCounts"  ||
                $params->{mode} eq "GenerateTargetQcList"){
             die "Directory for controlsamples (-controlsDir) does not exist please specify to continue analysis.\n";
         }
     }
-    if ($params->{mode} eq "PipelineFromBams" || $params->{mode} eq "PipelineFromCounts"){
+    if ($params->{mode} eq "PipelineFromBams" || $params->{mode} eq "PipelineFromCrams" || $params->{mode} eq "PipelineFromCounts"){
         if (not defined $params->{targetQcList}){
            $params->{targetQcList} = $params->{outputdir}."/"."targetQcList.txt";
         }
@@ -248,12 +258,20 @@ $params->{inputdirOriginal}  = $params->{inputdir};
 
 
 #pipeline mode
-if ($params->{mode} eq "PipelineFromBams" || $params->{mode} eq "PipelineFromCounts"){
+if ($params->{mode} eq "PipelineFromBams" || $params->{mode} eq "PipelineFromCrams" || $params->{mode} eq "PipelineFromCounts"){
 
     #mode to run complete pipeline from fresh bam inputs
     if ($params->{mode} eq "PipelineFromBams"){
         startWithBamMode();
      }   
+
+    #mode to run complete pipeline from fresh bam inputs
+    if ($params->{mode} eq "PipelineFromCrams"){
+        if( ! defined $params->{fasta}){
+            usage("User has specifed PipelineFromCrams but has not specified a required fasta file for decompressing CRAMS with parameter --fasta");
+        }
+        startWithCramMode();
+    }
     #mode to run complete pipeline from previous counts
     if ($params->{mode} eq "PipelineFromCounts"){
         startWithAvgCountMode()
@@ -269,8 +287,17 @@ if ($params->{mode} eq "PipelineFromBams" || $params->{mode} eq "PipelineFromCou
     }
     createFinalListMode();
 #Start analysis from BAM file
-}elsif ($params->{mode} eq "StartWithBam" || $params->{mode} eq "addToControls"){ 
+$params->{mode} eq "addToControls"
+}elsif ($params->{mode} eq "addToControls"){
+    addToControlsMode();
+}elsif ($params->{mode} eq "StartWithBam"){ 
     startWithBamMode();
+#Start analysis from CRAM file
+}elsif ($params->{mode} eq "StartWithCram"){
+    if( ! defined $params->{fasta}){
+        usage("User has specifed PipelineFromCrams but has not specified a required fasta file for decompressing CRAMS with parameter --fasta");
+    }
+    startWithCramMode();
 #Start analysis from average count files
 }elsif ($params->{mode} eq "StartWithAvgCount"){
     startWithAvgCountMode();
@@ -303,6 +330,25 @@ print STDERR "\nFinished analysis $endtime\n";
 ## Main subs for each mode                              ##
 ##########################################################
 
+sub addToControlsMode{
+    if (defined $params->{rmdup}) { #Remove duplicate switch added in cmdline
+        print "\n############\nrmdup switch detected, duplicate removal included in analysis\n############\n\n";
+        print "Starting removing duplicates and creating new BAM files..\n";
+    }
+    #Read BAM files
+    print "Reading files to process..\n";
+    my @inputCRAMiles = readFile($params->{inputdir}, ".cram");
+    if (@inputCRAMiles || ! defined $params->{fasta}){
+        usage("User has specifed CRAM files to process but has not given a location for the required fasta files with the parameter --fasta");
+    }
+    #Start analysis from CRAM files
+    startWithCram(\@inputCRAMiles);
+    my @inputBAMfiles = readFile($params->{inputdir}, ".bam");
+    #Start analysis from BAM file
+    startWithBam(\@inputfiles);
+}
+
+
 sub startWithBamMode{
     if (defined $params->{rmdup}) { #Remove duplicate switch added in cmdline
         print "\n############\nrmdup switch detected, duplicate removal included in analysis\n############\n\n";
@@ -314,6 +360,22 @@ sub startWithBamMode{
     #Start analysis from BAM file
     startWithBam(\@inputfiles);
 }
+
+
+sub startWithCramMode{
+    if (defined $params->{rmdup}) { #Remove duplicate switch added in cmdline
+        print "\n############\nrmdup switch detected, duplicate removal included in analysis\n############\n\n";
+        print "Starting removing duplicates and creating new BAM files..\n";
+    }
+    #Read BAM files
+    print "Reading CRAM files to process..\n";
+    my @inputfiles = readFile($params->{inputdir}, ".cram");  
+    #Start analysis from BAM file
+    startWithCram(\@inputfiles);
+}
+
+
+
 
 sub startWithAvgCountMode{
     #Read count TXT files
@@ -740,10 +802,54 @@ sub startWithBam{
             }
             
             print STDERR "Starting counts analysis..\n";
-            countFromBam($file_to_count, $file);
+            countFromBam($file_to_count, $file, $ext);
         }
     }    
-}    
+}
+
+
+sub startWithCram{
+    my ($inputfiles) = @_;                     
+    ###############################################
+    ## Main code to extract region coverage from ##
+    ## BAM file(s)                               ##
+    foreach my $cram (@$inputfiles){
+    
+        #Check if *.bam.bai or *.bai file exist, otherwise skip this bam file
+        my ($file,$dir,$ext) = fileparse($cram, qr/\.[^.]*/);
+        print STDERR "Processing $file..\n";
+        my $bai_file = $file.".bai";
+        my $file_to_count;
+        unless (-e $params->{inputdir}."/".$bai_file) {
+            #Don't process this file, because it doesn't have an indexfile
+            print  STDERR  "##### WARNING #####WARNING #####\n".
+                            "Cannot find an index file for file: ".$params->{inputdir}."/".$bam."\n".
+                            "\t,skipping this file from analysis\n".
+                            "##### WARNING ##### WARNING #####\n\n";
+        }else{
+            #set temp files... if necessary 
+            my $tmp_dir     = File::Temp->newdir();
+            my $rmdup_bam   = File::Temp->new( TEMPLATE => 'tempXXXXX',DIR => $tmp_dir, SUFFIX => '.rmdup.bam'  );
+
+            #Check if duplicates need to be removed
+            if (defined $params->{rmdup}){
+                #Process BAM files generating duplicate removed BAM files
+                rmDupCram($bam, $rmdup_bam, $tmp_dir);
+                print STDERR "Starting counts analysis..\n"; #Start to count regions
+                $file_to_count = $rmdup_bam;
+            }else{ #BAM files are already rmdupped, add them to list of files to process (retrieve them from inputdir cmdline)
+                $file_to_count = $params->{inputdir}."/".$bam;
+            }
+            
+            print STDERR "Starting counts analysis..\n";
+            countFromBam($file_to_count, $file, $ext);
+        }
+    }    
+}
+
+
+
+
 sub startWithAvgCount{
     my ($inputfiles) = @_;
      
@@ -2364,6 +2470,7 @@ sub writeOutput {
 sub countFromBam {
     my $bam = shift;
     my $ori_file_name = shift;
+    my $ext = shift;
     #Specify header to write in outputfile
     my $outputToWrite = "CHR\tSTART\tSTOP\tGENE\tTARGET\tREGION_COV\tAVG_AUTOSOMAL_COV\tAVG_TOTAL_COV\tAVG_GENE_COV\tNORMALIZED_AUTOSOMAL\tNORMALIZED_TOTAL\tNORMALIZED_GENE\n";
     my ($file,$dir,$ext) = fileparse($ori_file_name, qr/\.[^.]*/);
@@ -2380,6 +2487,14 @@ sub countFromBam {
     my $counts_tmp_file   = File::Temp->new( TEMPLATE => 'tempXXXXX', SUFFIX => '.txt'  );
 
     print $counts_tmp_file uc(join("\t", 'chr', 'start', 'stop', 'gene', 'target', 'regioncov'."\n"));
+
+   if ($params->{samtools_depth} && $ext =~ /cram/i){
+       print STDERR "User specified using samtools depth for counts, but CRAM files are not supported ... skipping $ori_file_name\n";
+       return;
+   }elsif(defined $params->{ampliconcov} && $ext =~ /cram/i){
+       print STDERR "User specified using ampliconcov. That required Samtools depth for counts, but CRAM files are not supported ... skipping $ori_file_name\n";
+       return;
+   }
 
    if($params->{samtools_depth} || $params -> {ampliconcov}){
         # my $progress = Term::ProgressBar->new({
@@ -2501,14 +2616,28 @@ sub countFromBam {
             $params->{mosdepth_threads} = 1;
             print STDERR "mosdepth-threads reset to min of 1\n";
         };
-        my $extractcov = join " ", ( "mosdepth", 
-                                    "-t", $params->{mosdepth_threads},
-                                    "-b", $mosdepth_inputBed_file->filename(),
-                                    "-n",
-                                    $fastmode,
-                                    $prefix,
-                                    $bam
-                                );
+        my $extractcov;
+        if ($ext =~ /cram/i){
+            $extractcov = join " ", ( "mosdepth", 
+                                        "-t", $params->{mosdepth_threads},
+                                        "-b", $mosdepth_inputBed_file->filename(),
+                                        "-n",
+                                        "-f", $params->{fasta_file},
+                                        $fastmode,
+                                        $prefix,
+                                        $bam
+                                    );
+        }else{
+            $extractcov = join " ", ( "mosdepth", 
+                                        "-t", $params->{mosdepth_threads},
+                                        "-b", $mosdepth_inputBed_file->filename(),
+                                        "-n",
+                                        $fastmode,
+                                        $prefix,
+                                        $bam
+                                    );
+        }
+
         CmdRunner($extractcov);
         open (COVERAGE, "zcat $prefix.regions.bed.gz |") or die "Cannot zcat file: $prefix.regions.bed.gz\n";
         foreach my $line (<COVERAGE>){
@@ -2889,6 +3018,21 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 \t\t\t\t[-samtools-depth]
 
+
+-mode\t\t\tMode to run in, one of the following required:
+\t\t\PipelineFromCrams :
+\t\t\t\tStart with CRAM files as input, to enable duplicate
+\t\t\t\tremoval use the rmdup variable.
+\t\t\t\tREQUIRED:
+\t\t\t\t[-inputDir, -outputDir, -bed, -controlsDir, -fasta]
+\t\t\t\tOPTIONAL:
+\t\t\t\t[-targetQcList]
+\t\t\t\t[-rmDup, -sexChr, controlSamples]
+\t\t\t\t[-regionThreshold, -ratioCutOffLow, -ratioCutOffHigh, -zScoreCutOffLow, -zScoreCutOffHigh, -sampleRatioScore]
+\t\t\t\t[-percentageLessReliableTargets]
+\t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
+\t\t\t\t[-samtools-depth]
+
 \t\t\tPipelineFromCounts :
 \t\t\t\tStart with BAM files as input, to enable duplicate
 \t\t\t\tremoval use the rmdup variable.
@@ -2910,6 +3054,7 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-controlsDir] This is set to the same as -outputDir
 \t\t\t\tOPTIONAL:
 \t\t\t\t[-rmDup, ]
+\t\t\t\t[-fasta (if any of input files are CRAM)]
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 \t\t\t\t[-samtools-depth]
 
@@ -2923,6 +3068,15 @@ Usage: $0 <mode> <parameters>
 \t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
 \t\t\t\t[-samtools-depth]
 
+\t\t\tStartWithCram :
+\t\t\t\tStart with CRAM files as input, to enable duplicate
+\t\t\t\tremoval use the rmdup variable.
+\t\t\t\tREQUIRED:
+\t\t\t\t[-inputDir, -outputDir, -bed, -controlsDir, -fasta]
+\t\t\t\tOPTIONAL:
+\t\t\t\t[-rmDup, -useSampleAsControl, -ampliconcov]
+\t\t\t\t[-mosdepth-fast-mode or -fastmode] negatable with [-nomosdepth-fast-mode]
+\t\t\t\t[-samtools-depth]
 
 \t\t\tStartWithAvgCount :
 \t\t\t\tStart with Average Count files as input. This is a five column text file
@@ -2974,6 +3128,8 @@ PARAMETERS:
 -targetQcList\t\tPath to file containing target QC values.
 
 -controlSamples\t\tNumber of samples to use in Match score analysis. DEFAULT: 30
+
+-fasta\tWhen input are CRAM files please specify the path to the fasta file required for decompression
 
 -regionThreshold\tPercentage of all control samples differing more than 3
 \t\t\tstandard deviations from mean coverage of a region in the specified
