@@ -2857,7 +2857,7 @@ sub rmDupBam {
                                                 "view",
                                                 "-T", $params->{fasta},  
                                                 "-b",
-                                                "-o" $bam_temp->filename,
+                                                "-o", $bam_temp->filename,
                                                 $params->{inputdir}."/".$bam,
         #Mark duplicates command
         $rmdup = join " ",   "samtools",
