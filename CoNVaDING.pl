@@ -753,8 +753,9 @@ sub startWithBam{
         my ($file,$dir,$ext) = fileparse($bam, qr/\.[^.]*/);
         print STDERR "Processing $file..\n";
         my $bai_file = $file.".bai";
+        my $bam_bai_file = $file.".bam.bai";
         my $file_to_count;
-        unless (-e $params->{inputdir}."/".$bai_file) {
+        unless (-e $params->{inputdir}."/".$bai_file || -e $params->{inputdir}."/".$bam_bai_file) {
             #Don't process this file, because it doesn't have an indexfile
             print  STDERR  "##### WARNING #####WARNING #####\n".
                             "Cannot find an index file for file: ".$params->{inputdir}."/".$bam."\n".
